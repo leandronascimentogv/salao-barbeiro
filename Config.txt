@@ -1,0 +1,28 @@
+/**
+ * Config.gs — Constantes e leitura da configuração
+ */
+
+const ABAS = {
+  CONFIG: 'Configuracao',
+  SERVICOS: 'Servicos',
+  PROFISSIONAIS: 'Profissionais',
+  CLIENTES: 'Clientes',
+  AGENDAMENTOS: 'Agendamentos',
+  ANALISES: 'Analises'
+};
+
+const STATUS = {
+  AGENDADO: 'agendado',
+  CONCLUIDO: 'concluido',
+  CANCELADO: 'cancelado',
+  FALTOU: 'faltou'
+};
+
+function getConfig() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(ABAS.CONFIG);
+  if (!sh) throw new Error('Aba não encontrada: ' + ABAS.CONFIG);
+  const dados = sh.getDataRange().getValues();
+  const cfg = {};
+  dados.slice(1).forEach(l => { if (l[0]) cfg[String(l[0])] = l[1]; });
+  return cfg;
+}

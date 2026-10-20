@@ -1,0 +1,89 @@
+/**
+ * WebApp.gs — Rotas do app do dono e do cliente
+ */
+
+function doGet(e) {
+  const pagina = (e && e.parameter && e.parameter.pagina) || 'dono';
+  const arquivo = pagina === 'cliente' ? 'Cliente' : 'Index';
+  return HtmlService.createHtmlOutputFromFile(arquivo)
+    .setTitle('Agenda')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+function getNomeEstabelecimento() {
+  return getConfig().nome_estabelecimento || 'Estabelecimento';
+}
+
+function executarAcao(nome) {
+  switch (nome) {
+    case 'gerarAnalises': return JSON.stringify(gerarAnalises(), null, 2);
+    case 'listarHoje': return JSON.stringify(agendaDoDia(new Date()), null, 2);
+    case 'fazerBackup': return fazerBackup();
+    case 'enviarLembretes': return enviarLembretesAmanha();
+    case 'abrirPlanilha': return SpreadsheetApp.getActive().getUrl();
+    default: return 'Ação desconhecida: ' + nome;
+  }
+}
+
+// --- API do app do cliente ---
+
+function apiListarServicos() {
+  return lerAba(ABAS.SERVICOS).filter(s => String(s.ativo).toUpperCase() === 'TRUE');
+}
+
+function apiListarProfissionais() {
+  return lerAba(ABAS.PROFISSIONAIS).filter(p => String(p.ativo).toUpperCase() === 'TRUE');
+}
+
+function apiHorarios(profissionalId, dataISO, servicoId) {
+  return horariosLivres(profissionalId, dataISO, servicoId);
+}
+
+function apiAgendar(dados) {
+  const serv = lerAba(ABAS.SERVICOS).find(s => String(s.id) === String(dados.servicoId));
+  if (!serv) return { ok: false, erro: 'Serviço não encontrado' };
+  if (horariosLivres(dados.profissionalId, dados.data, dados.servicoId).indexOf(dados.hora) === -1)
+    return { ok: false, erro: 'Horário indisponível' };
+
+  const id = proximoId(ABAS.AGENDAMENTOS);
+  appendLinha(ABAS.AGENDAMENTOS, {
+    id: id,
+    data: dados.data,
+    hora_inicio: dados.hora,
+    hora_fim: hhmm(minutos(dados.hora) + Number(serv.duracao_min)),
+    cliente_nome: dados.nome,
+    cliente_telefone: dados.telefone,
+    servico_id: dados.servicoId,
+    profissional_id: dados.profissionalId,
+    status: STATUS.AGENDADO,
+    valor: serv.preco,
+    criado_em: new Date()
+  });
+  enviarConfirmacao(id);
+  return { ok: true, id: id };
+}
+
+// --- API do painel de gestão (app do dono) ---
+
+function apiListarAgendamentos(dataISO) {
+  return lerAba(ABAS.AGENDAMENTOS)
+    .filter(a => String(a.data).slice(0, 10) === dataISO)
+    .sort((a, b) => String(a.hora_inicio).localeCompare(String(b.hora_inicio)));
+}
+
+function apiAtualizarStatus(id, novoStatus) {
+  const ok = atualizarCelula(ABAS.AGENDAMENTOS, id, 'status', novoStatus);
+  return ok ? { ok: true } : { ok: false, erro: 'Agendamento não encontrado' };
+}
+
+function apiRemarcar(id, novaData, novaHora) {
+  const a = lerAba(ABAS.AGENDAMENTOS).find(x => String(x.id) === String(id));
+  if (!a) return { ok: false, erro: 'Agendamento não encontrado' };
+  if (horariosLivres(a.profissional_id, novaData, a.servico_id).indexOf(novaHora) === -1)
+    return { ok: false, erro: 'Horário indisponível' };
+  const serv = lerAba(ABAS.SERVICOS).find(s => String(s.id) === String(a.servico_id));
+  atualizarCelula(ABAS.AGENDAMENTOS, id, 'data', novaData);
+  atualizarCelula(ABAS.AGENDAMENTOS, id, 'hora_inicio', novaHora);
+  atualizarCelula(ABAS.AGENDAMENTOS, id, 'hora_fim', hhmm(minutos(novaHora) + Number(serv.duracao_min)));
+  return { ok: true };
+}
