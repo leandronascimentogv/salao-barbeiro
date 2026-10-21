@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:system-ui,Arial,sans-serif;margin:0;padding:16px;background:#f2f2f2}
+h1{font-size:20px;margin:0 0 12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{padding:14px;font-size:15px;border:0;border-radius:12px;background:#111;color:#fff;font-weight:600}
+button.sec{background:#555}
+button.mini{padding:8px 10px;font-size:13px;border-radius:8px;margin:2px 2px 0 0}
+.card{background:#fff;padding:14px;border-radius:12px;margin-top:14px;font-size:14px}
+.item{border-bottom:1px solid #eee;padding:10px 0}
+.item:last-child{border-bottom:0}
+.hora{font-weight:700}
+.st{font-size:12px;padding:2px 8px;border-radius:10px;background:#eee}
+.st.agendado{background:#e6f0ff}
+.st.concluido{background:#e6ffe6}
+.st.cancelado{background:#ffe6e6}
+.st.faltou{background:#fff3e0}
+input[type=date]{padding:10px;font-size:16px;border-radius:10px;border:1px solid #ccc;width:100%;box-sizing:border-box}
+#saida{white-space:pre-wrap;max-height:50vh;overflow:auto}
+</style>
+</head>
+<body>
+<h1 id="titulo">Painel</h1>
+<div class="grid">
+  <button onclick="acao('gerarAnalises')">Gerar análises</button>
+  <button onclick="acao('fazerBackup')">Backup</button>
+  <button onclick="acao('enviarLembretes')">Enviar lembretes</button>
+  <button onclick="acao('abrirPlanilha')">Abrir planilha</button>
+</div>
+
+<div class="card">
+  <strong>Agenda</strong>
+  <input type="date" id="data" onchange="carregarAgenda()">
+  <div id="agenda"></div>
+</div>
+
+<div class="card" id="saida">Escolha uma ação.</div>
+
+<script>
+function acao(nome){
+  document.getElementById('saida').textContent='Executando...';
+  google.script.run.withSuccessHandler(r=>{
+    document.getElementById('saida').textContent = typeof r==='string' ? r : JSON.stringify(r,null,2);
+  }).executarAcao(nome);
+}
+function carregarAgenda(){
+  const d=document.getElementById('data').value;
+  if(!d) return;
+  document.getElementById('agenda').textContent='Carregando...';
+  google.script.run.withSuccessHandler(lista=>{
+    if(!lista.length){document.getElementById('agenda').innerHTML='<em>Nenhum agendamento nesse dia.</em>';return;}
+    document.getElementById('agenda').innerHTML = lista.map(a=>`
+      <div class="item">
+        <div><span class="hora">${a.hora_inicio}</span> — ${a.cliente_nome}</div>
+        <div><span class="st ${a.status}">${a.status}</span> · R$ ${a.valor}</div>
+        <div>
+          <button class="mini" onclick="mudar('${a.id}','concluido')">Concluir</button>
+          <button class="mini sec" onclick="mudar('${a.id}','cancelado')">Cancelar</button>
+          <button class="mini sec" onclick="mudar('${a.id}','faltou')">Faltou</button>
+          <button class="mini sec" onclick="remarcar('${a.id}')">Remarcar</button>
+        </div>
+      </div>`).join('');
+  }).apiListarAgendamentos(d);
+}
+function mudar(id,status){
+  google.script.run.withSuccessHandler(()=>carregarAgenda()).apiAtualizarStatus(id,status);
+}
+function remarcar(id){
+  const novaData=prompt('Nova data (AAAA-MM-DD):');
+  if(!novaData) return;
+  const novaHora=prompt('Nova hora (HH:MM):');
+  if(!novaHora) return;
+  google.script.run.withSuccessHandler(r=>{
+    if(!r.ok) alert(r.erro);
+    carregarAgenda();
+  }).apiRemarcar(id,novaData,novaHora);
+}
+google.script.run.withSuccessHandler(t=>document.getElementById('titulo').textContent='Painel — '+t).getNomeEstabelecimento();
+const d=new Date();
+document.getElementById('data').value = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+carregarAgenda();
+</script>
+</body>
+</html>
