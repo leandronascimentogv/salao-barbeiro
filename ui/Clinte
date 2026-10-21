@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:system-ui,Arial,sans-serif;margin:0;padding:16px;max-width:520px}
+h2{margin:0 0 12px}
+select,input,button{width:100%;padding:12px;margin:6px 0;font-size:16px;box-sizing:border-box;border:1px solid #ccc;border-radius:10px}
+button{background:#111;color:#fff;border:0;font-weight:600}
+.slot{display:inline-block;padding:10px 14px;margin:4px 4px 0 0;border:1px solid #111;border-radius:8px;cursor:pointer;font-size:15px}
+.slot.sel{background:#111;color:#fff}
+#msg{margin-top:12px;font-weight:600}
+</style>
+</head>
+<body>
+<h2 id="titulo">Agendar horário</h2>
+<select id="servico"></select>
+<select id="profissional"></select>
+<input type="date" id="data">
+<div id="slots"></div>
+<input id="nome" placeholder="Seu nome">
+<input id="telefone" placeholder="WhatsApp com DDD">
+<button onclick="confirmar()">Confirmar agendamento</button>
+<div id="msg"></div>
+<script>
+let horaSel = '';
+google.script.run.withSuccessHandler(t=>document.getElementById('titulo').textContent='Agendar — '+t).getNomeEstabelecimento();
+google.script.run.withSuccessHandler(lista=>{
+  document.getElementById('servico').innerHTML = lista.map(s=>'<option value="'+s.id+'">'+s.nome+' — R$ '+s.preco+'</option>').join('');
+  carregar();
+}).apiListarServicos();
+google.script.run.withSuccessHandler(lista=>{
+  document.getElementById('profissional').innerHTML = lista.map(p=>'<option value="'+p.id+'">'+p.nome+'</option>').join('');
+  carregar();
+}).apiListarProfissionais();
+function carregar(){
+  const s=document.getElementById('servico').value;
+  const p=document.getElementById('profissional').value;
+  const d=document.getElementById('data').value;
+  if(!s||!p||!d){document.getElementById('slots').innerHTML='';return;}
+  google.script.run.withSuccessHandler(horas=>{
+    horaSel='';
+    document.getElementById('slots').innerHTML = horas.length
+      ? horas.map(h=>'<span class="slot" onclick="sel(this,\''+h+'\')">'+h+'</span>').join('')
+      : '<em>Sem horários livres nesse dia.</em>';
+  }).apiHorarios(p,d,s);
+}
+function sel(el,h){
+  document.querySelectorAll('.slot').forEach(x=>x.classList.remove('sel'));
+  el.classList.add('sel'); horaSel=h;
+}
+function confirmar(){
+  const dados={
+    servicoId:document.getElementById('servico').value,
+    profissionalId:document.getElementById('profissional').value,
+    data:document.getElementById('data').value,
+    hora:horaSel,
+    nome:document.getElementById('nome').value,
+    telefone:document.getElementById('telefone').value
+  };
+  if(!dados.hora||!dados.nome||!dados.telefone){document.getElementById('msg').textContent='Escolha o horário e preencha nome e WhatsApp.';return;}
+  document.getElementById('msg').textContent='Enviando...';
+  google.script.run.withSuccessHandler(r=>{
+    document.getElementById('msg').textContent = r.ok ? 'Agendado! Protocolo nº '+r.id : 'Não foi possível agendar.';
+  }).apiAgendar(dados);
+}
+document.getElementById('servico').onchange=carregar;
+document.getElementById('profissional').onchange=carregar;
+document.getElementById('data').onchange=carregar;
+</script>
+</body>
+</html>
